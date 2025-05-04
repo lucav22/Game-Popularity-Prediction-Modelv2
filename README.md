@@ -1,1 +1,1 @@
-# Game-Popularity-Predictorv2
+# Game-Popularity-Prediction-Modelv2
