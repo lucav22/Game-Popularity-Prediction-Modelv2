@@ -1,114 +1,167 @@
+"""
+Data Collector Module
+
+Purpose:
+    Manages the collection, storage, and organization of game data from various sources.
+    This module provides the infrastructure for building time series datasets of game
+    popularity metrics for the Game Popularity Prediction System v2.
+
+Key Features:
+    - Categorized game tracking (successful, declining, experimental)
+    - Data collection scheduling and automation
+    - CSV storage with compression options
+    - Data merging and aggregation capabilities
+
+Author: Gianluca Villegas
+Date: 2025-05-04
+Version: 2.0
+"""
+
 import os
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
-import seaborn as sns
 import time
 import json
-import sys
 from typing import List, Dict, Optional, Union, Tuple
+from pathlib import Path
 
-# Import our custom Steam API connector
-from steam_api_connector import SteamAPIConnector
+from src.connectors.steam_api_connector import SteamAPIConnector
 
-class SteamDataCollector:
+class DataCollector:
     """
-    A class to handle the collection and management of Steam game data
-    for the Game Popularity Prediction Model.
+    A class to handle the collection and management of game data for predictive modeling.
+    
+    This collector is designed to be extensible to multiple data sources beyond Steam.
     """
     
-    def __init__(self, data_dir: str = "data"):
+    def __init__(self, data_dir: str = "data", config_path: Optional[str] = None):
         """
         Initialize the data collector.
         
         Args:
             data_dir (str): Directory to store collected data
+            config_path (str, optional): Path to configuration file
+            
+        The configuration file should contain:
+            - Game categories and their IDs
+            - Collection schedules
+            - API credentials
         """
-        self.data_dir = data_dir
-        self.api = SteamAPIConnector()
+        self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(exist_ok=True)
         
-        # Create data directory if it doesn't exist
-        os.makedirs(data_dir, exist_ok=True)
+        # Initialize API connector
+        self.steam_api = SteamAPIConnector()
         
-        # Define game categories (can be expanded)
-        self.game_categories = {
+        # Load or initialize game categories
+        self.config_path = config_path
+        self.game_categories = self._load_game_categories()
+        
+        # Create storage for collected data
+        self.collected_data = {}
+        
+    def _load_game_categories(self) -> Dict[str, List[int]]:
+        """
+        Load game categories from config file or use defaults.
+        
+        Returns:
+            Dict[str, List[int]]: Categories with app IDs
+            
+        Note:
+            Default categories can be overridden by providing a config file.
+            Config should be JSON format with category names as keys.
+        """
+        # Default game categories
+        default_categories = {
             "successful": [
-                730,    # CS:GO
-                570,    # Dota 2
-                578080, # PUBG
+                730,     # CS:GO
+                570,     # Dota 2
+                578080,  # PUBG
                 1172470, # Apex Legends
                 1599340, # Lost Ark
                 1091500, # Cyberpunk 2077
-                1675200  # Baldur's Gate 3
+                1675200, # Baldur's Gate 3
+                1245620  # ELDEN RING
             ],
             "declining": [
                 1240440, # Babylon's Fall
-                1262900, # New World 
+                1262900, # New World
                 594650,  # Hunt: Showdown
                 235960,  # Natural Selection 2
                 233860,  # Kenshi
-                292030   # The Witcher 3: Wild Hunt
+                292030,  # The Witcher 3: Wild Hunt (older title)
+                252950   # Rocket League (transitioned to Epic)
             ],
             "experimental": [
-                1938090, # Call of Duty: Modern Warfare III | Warzone
+                1938090, # Call of Duty: MW3 | Warzone
                 1551360, # Forza Horizon 5
-                1245620, # ELDEN RING
-                1063730, # New World
                 1426210, # Constant Caliber
-                1240520  # Redfall
+                1240520, # Redfall
+                1675920, # PAYDAY 3
+                1332820  # Hogwarts Legacy
             ]
         }
         
-        # Store for collected data
-        self.collected_data = {}
-        
-    def get_game_ids_by_category(self, category: Optional[str] = None) -> List[int]:
-        """
-        Get game IDs for a specific category or all categories.
-        
-        Args:
-            category (str, optional): Category to get games for. If None, returns all games.
-            
-        Returns:
-            List[int]: List of game IDs
-        """
-        if category and category in self.game_categories:
-            return self.game_categories[category]
-        else:
-            # Return all game IDs from all categories
-            all_ids = []
-            for cat_ids in self.game_categories.values():
-                all_ids.extend(cat_ids)
-            return all_ids
-            
-    def collect_current_data(self, game_ids: Optional[List[int]] = None) -> pd.DataFrame:
-        """
-        Collect current player data for specified games.
-        
-        Args:
-            game_ids (List[int], optional): List of game IDs to collect data for.
-                If None, collects data for all defined games.
+        if self.config_path and os.path.exists(self.config_path):
+            try:
+                with open(self.config_path, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading config file: {e}. Using defaults.")
                 
-        Returns:
-            pd.DataFrame: DataFrame with collected data
+        return default_categories
+    
+    def get_all_game_ids(self) -> List[int]:
         """
-        # If no game IDs provided, use all defined games
-        if game_ids is None:
-            game_ids = self.get_game_ids_by_category()
+        Get all game IDs across all categories.
+        
+        Returns:
+            List[int]: Complete list of game IDs to track
+        """
+        all_ids = []
+        for category_ids in self.game_categories.values():
+            all_ids.extend(category_ids)
+        return list(set(all_ids))  # Remove duplicates
+    
+    def collect_current_data(self, 
+                            game_ids: Optional[List[int]] = None,
+                            include_details: bool = True) -> pd.DataFrame:
+        """
+        Collect current data from Steam API.
+        
+        Args:
+            game_ids (List[int], optional): Specific games to collect. Default: all
+            include_details (bool): Whether to fetch detailed game information
             
-        print(f"Collecting current player data for {len(game_ids)} games...")
+        Returns:
+            pd.DataFrame: Collected data with columns:
+                - app_id: Steam application ID
+                - name: Game name
+                - player_count: Current player count
+                - category: Game category
+                - timestamp: Collection timestamp
+                - Additional details if include_details=True
+                
+        The returned DataFrame is also stored in self.collected_data for later use.
+        """
+        if game_ids is None:
+            game_ids = self.get_all_game_ids()
+            
+        print(f"[{datetime.now()}] Collecting data for {len(game_ids)} games...")
         
-        # Get data batch from API
-        data = self.api.get_game_data_batch(game_ids)
+        # Collect basic player counts
+        player_counts = self.steam_api.get_multiple_player_counts(game_ids)
+        timestamp = player_counts.pop('timestamp')
         
-        # Transform to DataFrame
-        rows = []
-        for app_id, app_data in data.items():
+        # Build DataFrame
+        data_rows = []
+        
+        for app_id, player_count in player_counts.items():
             row = {
                 'app_id': app_id,
-                'timestamp': app_data['timestamp'],
-                'player_count': app_data['current_players']
+                'player_count': player_count,
+                'timestamp': timestamp
             }
             
             # Add category information
@@ -119,214 +172,246 @@ class SteamDataCollector:
             else:
                 row['category'] = 'uncategorized'
             
-            # Add basic game details if available
-            if app_data['details'] and 'data' in app_data['details']:
-                game_data = app_data['details']['data']
-                row['name'] = game_data.get('name', '')
-                row['release_date'] = game_data.get('release_date', {}).get('date', '')
-                row['metacritic_score'] = game_data.get('metacritic', {}).get('score', '')
-                row['genres'] = ','.join([genre.get('description', '') for genre in game_data.get('genres', [])])
-                row['is_free'] = game_data.get('is_free', False)
-                
-                # Extract price information if available
-                price_info = game_data.get('price_overview', {})
-                row['price'] = price_info.get('final_formatted', '') if price_info else ''
-                
-            rows.append(row)
+            # Optionally fetch detailed information
+            if include_details:
+                details = self.steam_api.get_app_details(app_id)
+                if details and 'data' in details:
+                    game_data = details['data']
+                    row.update({
+                        'name': game_data.get('name', ''),
+                        'release_date': game_data.get('release_date', {}).get('date', ''),
+                        'metacritic_score': game_data.get('metacritic', {}).get('score', ''),
+                        'genres': ','.join([g.get('description', '') for g in game_data.get('genres', [])]),
+                        'price': game_data.get('price_overview', {}).get('final_formatted', ''),
+                        'is_free': game_data.get('is_free', False)
+                    })
             
-        df = pd.DataFrame(rows)
+            data_rows.append(row)
         
-        # Store the collected data
-        self.collected_data[datetime.now().strftime('%Y-%m-%d-%H-%M')] = df
+        # Create DataFrame
+        df = pd.DataFrame(data_rows)
+        
+        # Store in memory
+        collection_key = datetime.now().strftime('%Y-%m-%d-%H-%M')
+        self.collected_data[collection_key] = df
         
         return df
     
-    def save_current_data(self, data: Optional[pd.DataFrame] = None, 
-                         filename: Optional[str] = None) -> str:
+    def save_data(self, 
+                  data: Optional[pd.DataFrame] = None,
+                  filename: Optional[str] = None,
+                  compress: bool = False) -> str:
         """
-        Save the most recently collected data to a CSV file.
+        Save collected data to disk.
         
         Args:
-            data (pd.DataFrame, optional): DataFrame to save. If None, uses the most recent data.
-            filename (str, optional): Filename to save to. If None, generates a timestamped filename.
+            data (pd.DataFrame, optional): Data to save. Default: most recent collection
+            filename (str, optional): Custom filename. Default: auto-generated
+            compress (bool): Whether to compress the file
             
         Returns:
-            str: Path to the saved file
+            str: Path to saved file
+            
+        Note:
+            Compressed files are saved as CSV with gzip compression to save space.
         """
-        # Use provided data or most recent collection
+        # Get data to save
         if data is None:
             if not self.collected_data:
-                raise ValueError("No data has been collected yet.")
+                raise ValueError("No data to save. Collect data first.")
             latest_key = max(self.collected_data.keys())
             data = self.collected_data[latest_key]
             
         # Generate filename if not provided
         if filename is None:
             timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M')
-            filename = f"steam_data_{timestamp}.csv"
+            extension = '.csv.gz' if compress else '.csv'
+            filename = f"steam_data_{timestamp}{extension}"
             
-        # Ensure path is in data directory
-        filepath = os.path.join(self.data_dir, filename)
+        # Save file
+        filepath = self.data_dir / filename
         
-        # Save data
-        data.to_csv(filepath, index=False)
-        print(f"Data saved to {filepath}")
-        
-        return filepath
+        if compress:
+            data.to_csv(filepath, index=False, compression='gzip')
+        else:
+            data.to_csv(filepath, index=False)
+            
+        print(f"[{datetime.now()}] Data saved to {filepath}")
+        return str(filepath)
     
-    def load_data(self, filepath: str) -> pd.DataFrame:
+    def load_data(self, filepath: Union[str, Path]) -> pd.DataFrame:
         """
-        Load data from a CSV file.
+        Load data from file.
         
         Args:
-            filepath (str): Path to the CSV file
+            filepath (Union[str, Path]): Path to data file
             
         Returns:
             pd.DataFrame: Loaded data
+            
+        Automatically handles compressed files based on extension.
         """
+        filepath = Path(filepath)
+        
         # Handle relative paths
-        if not os.path.isabs(filepath):
-            filepath = os.path.join(self.data_dir, filepath)
+        if not filepath.is_absolute():
+            filepath = self.data_dir / filepath
             
         # Check if file exists
-        if not os.path.exists(filepath):
+        if not filepath.exists():
             raise FileNotFoundError(f"File not found: {filepath}")
             
-        # Load data
-        df = pd.DataFrame()
-        try:
+        # Load data based on compression
+        if filepath.suffix == '.gz':
+            df = pd.read_csv(filepath, compression='gzip')
+        else:
             df = pd.read_csv(filepath)
-            print(f"Loaded data from {filepath}")
-        except Exception as e:
-            print(f"Error loading data from {filepath}: {e}")
             
+        print(f"[{datetime.now()}] Loaded data from {filepath}")
         return df
     
-    def setup_scheduled_collection(self, interval_hours: int = 24, 
-                                  days_to_run: int = 30) -> None:
+    def merge_historical_data(self, 
+                             start_date: Optional[str] = None,
+                             end_date: Optional[str] = None,
+                             categories: Optional[List[str]] = None) -> pd.DataFrame:
         """
-        Set up scheduled data collection.
-        Note: This is a simplified version for demonstration. In production,
-        you would use a proper scheduler like cron or Airflow.
+        Merge multiple historical data files.
         
         Args:
-            interval_hours (int): Hours between collections
-            days_to_run (int): Number of days to run collections
-        """
-        print(f"Setting up scheduled collection every {interval_hours} hours for {days_to_run} days.")
-        print("Note: In a production environment, you would use a proper scheduler.")
-        print("For example, with cron or Airflow.")
-        print("\nSimulated collection schedule:")
-        
-        start_time = datetime.now()
-        for i in range(days_to_run * 24 // interval_hours):
-            collection_time = start_time + timedelta(hours=i * interval_hours)
-            print(f"  Collection {i+1}: {collection_time.strftime('%Y-%m-%d %H:%M')}")
-            
-        print("\nTo implement actual scheduled collection:")
-        print("1. Use a task scheduler (cron, Airflow, etc.)")
-        print("2. Set up a database for storing time series data")
-        print("3. Include error handling and notification systems")
-            
-    def merge_historical_files(self, file_pattern: str = "steam_data_*.csv") -> pd.DataFrame:
-        """
-        Merge multiple historical data files into a single DataFrame.
-        
-        Args:
-            file_pattern (str): Pattern to match historical data files
+            start_date (str, optional): Start date filter (YYYY-MM-DD)
+            end_date (str, optional): End date filter (YYYY-MM-DD)
+            categories (List[str], optional): Filter by game categories
             
         Returns:
             pd.DataFrame: Merged historical data
+            
+        This method is crucial for time series analysis and model training.
         """
-        import glob
+        # Find all data files
+        data_files = list(self.data_dir.glob("steam_data_*.csv*"))
         
-        # Find all matching files
-        file_paths = glob.glob(os.path.join(self.data_dir, file_pattern))
-        
-        if not file_paths:
-            print(f"No files found matching pattern: {file_pattern}")
+        if not data_files:
+            print(f"No data files found in {self.data_dir}")
             return pd.DataFrame()
             
-        print(f"Found {len(file_paths)} data files to merge.")
+        print(f"[{datetime.now()}] Found {len(data_files)} data files to merge")
         
         # Load and merge all files
         dfs = []
-        for file_path in file_paths:
+        for file_path in data_files:
             try:
-                df = pd.read_csv(file_path)
-                # Make sure timestamp is in the data
-                if 'timestamp' not in df.columns:
-                    # Extract timestamp from filename as fallback
-                    timestamp_str = os.path.basename(file_path).replace('steam_data_', '').replace('.csv', '')
-                    df['timestamp'] = timestamp_str
-                    
+                df = self.load_data(file_path)
                 dfs.append(df)
             except Exception as e:
                 print(f"Error loading {file_path}: {e}")
                 
         if not dfs:
-            print("No valid data files could be loaded.")
             return pd.DataFrame()
             
         # Concatenate all dataframes
         merged_df = pd.concat(dfs, ignore_index=True)
         
-        # Ensure timestamp is in datetime format
-        try:
-            merged_df['timestamp'] = pd.to_datetime(merged_df['timestamp'])
-        except:
-            print("Warning: Could not convert timestamp to datetime.")
-            
-        print(f"Merged data contains {len(merged_df)} records.")
-        return merged_df
+        # Convert timestamp to datetime
+        merged_df['timestamp'] = pd.to_datetime(merged_df['timestamp'])
         
-    def analyze_data_snapshot(self, data: Optional[pd.DataFrame] = None) -> Dict:
+        # Apply filters
+        if start_date:
+            merged_df = merged_df[merged_df['timestamp'] >= start_date]
+        if end_date:
+            merged_df = merged_df[merged_df['timestamp'] <= end_date]
+        if categories:
+            merged_df = merged_df[merged_df['category'].isin(categories)]
+            
+        # Sort by timestamp
+        merged_df = merged_df.sort_values('timestamp')
+        
+        print(f"[{datetime.now()}] Merged {len(merged_df)} records")
+        return merged_df
+    
+    def run_collection_loop(self, 
+                           interval_hours: int = 24,
+                           duration_days: int = 30,
+                           save_interval: int = 1) -> None:
         """
-        Perform basic analysis on a data snapshot.
+        Run continuous data collection in a loop.
         
         Args:
-            data (pd.DataFrame, optional): Data to analyze. If None, uses the most recent data.
+            interval_hours (int): Hours between collections
+            duration_days (int): Total days to run
+            save_interval (int): Hours between saves (default: each collection)
             
-        Returns:
-            Dict: Analysis results
+        Note:
+            This is a simple implementation. For production, use a proper
+            scheduler like Airflow or cron jobs.
         """
-        # Use provided data or most recent collection
-        if data is None:
-            if not self.collected_data:
-                raise ValueError("No data has been collected yet.")
-            latest_key = max(self.collected_data.keys())
-            data = self.collected_data[latest_key]
-            
-        # Basic analysis
-        results = {
-            'total_games': len(data),
-            'timestamp': datetime.now().isoformat(),
-            'category_counts': data['category'].value_counts().to_dict() if 'category' in data.columns else {},
-            'total_players': data['player_count'].sum() if 'player_count' in data.columns else 0,
-            'top_games': data.nlargest(5, 'player_count')[['name', 'player_count']].to_dict('records') 
-                        if 'player_count' in data.columns and 'name' in data.columns else []
+        end_time = datetime.now() + timedelta(days=duration_days)
+        collection_count = 0
+        
+        print(f"[{datetime.now()}] Starting collection loop...")
+        print(f"Collecting every {interval_hours} hours for {duration_days} days")
+        print(f"Collection will end at: {end_time}")
+        
+        while datetime.now() < end_time:
+            try:
+                # Collect data
+                df = self.collect_current_data()
+                collection_count += 1
+                
+                # Save data
+                self.save_data(df)
+                
+                # Print summary
+                print(f"\nCollection #{collection_count} Summary:")
+                print(f"  Games: {len(df)}")
+                print(f"  Total Players: {df['player_count'].sum():,}")
+                print(f"  Top Game: {df.nlargest(1, 'player_count').iloc[0]['name']} ({df['player_count'].max():,} players)")
+                
+                # Calculate sleep time
+                next_collection = datetime.now() + timedelta(hours=interval_hours)
+                sleep_seconds = (next_collection - datetime.now()).total_seconds()
+                
+                print(f"  Next collection at: {next_collection}")
+                print(f"  Sleeping for {sleep_seconds/3600:.1f} hours...")
+                
+                # Sleep until next collection
+                time.sleep(sleep_seconds)
+                
+            except KeyboardInterrupt:
+                print(f"\n[{datetime.now()}] Collection loop stopped by user")
+                break
+            except Exception as e:
+                print(f"\n[{datetime.now()}] Error in collection loop: {e}")
+                print("Continuing in 10 seconds...")
+                time.sleep(10)
+        
+        print(f"\n[{datetime.now()}] Collection loop completed. Total collections: {collection_count}")
+    
+    def get_collection_summary(self) -> Dict:
+        """
+        Get summary of collected data.
+        
+        Returns:
+            Dict: Summary statistics including:
+                - Number of collections
+                - Date range
+                - Game counts by category
+                - Data file information
+        """
+        summary = {
+            'in_memory_collections': len(self.collected_data),
+            'game_categories': {k: len(v) for k, v in self.game_categories.items()},
+            'total_games': len(self.get_all_game_ids()),
+            'data_files': []
         }
         
-        return results
-
-# Example usage
-if __name__ == "__main__":
-    # Initialize the collector
-    collector = SteamDataCollector()
-    
-    # Collect current data for all defined games
-    current_data = collector.collect_current_data()
-    
-    # Save the data
-    collector.save_current_data()
-    
-    # Perform basic analysis
-    analysis = collector.analyze_data_snapshot(current_data)
-    print("\nBasic Analysis:")
-    for key, value in analysis.items():
-        if key != 'top_games':
-            print(f"  {key}: {value}")
-            
-    print("\nTop Games by Player Count:")
-    for game in analysis['top_games']:
-        print(f"  {game['name']}: {game['player_count']} players")
+        # Get information about saved files
+        data_files = list(self.data_dir.glob("steam_data_*.csv*"))
+        for file_path in data_files:
+            file_info = {
+                'filename': file_path.name,
+                'size_mb': file_path.stat().st_size / (1024 * 1024),
+                'modified': datetime.fromtimestamp(file_path.stat().st_mtime).isoformat()
+            }
+            summary['data_files'].append(file_info)
+        
+        return summary

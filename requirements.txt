@@ -7,3 +7,9 @@ jupyter>=1.0.0
 ipywidgets>=7.6.0
 scikit-learn>=1.0.0  # For future machine learning implementations
 statsmodels>=0.13.0  # For time series analysis
+
+# External Data Connectors
+pytrends>=4.8.0      # For Google Trends data
+praw>=7.7.0          # For Reddit API access
+tweepy>=4.10.0       # For Twitter API v2 access
+python-dotenv>=0.20.0 # To load .env files
