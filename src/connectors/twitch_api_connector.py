@@ -37,8 +37,6 @@ class TwitchAPIConnector:
         # Cache for game_name -> game_id mapping
         self.game_id_cache: Dict[str, Optional[str]] = {}
 
-        print("TwitchAPIConnector initialized") # Removed (Requires Implementation)
-
     def _get_access_token(self) -> Optional[str]:
         """
         Obtains or refreshes the App Access Token from Twitch.

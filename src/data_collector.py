@@ -75,13 +75,6 @@ class DataCollector:
                 "reddit_subreddit": "lostarkgame",
                 "twitter_query": '"Lost Ark" OR #LostArkGame',
             },
-            "Palworld": { # Added mapping for Palworld
-                "reddit_subreddit": "Palworld",
-                "twitter_query": '"Palworld" OR #Palworld',
-                "google_trends_keyword": "Palworld",
-                "twitch_name": "Palworld",
-                "youtube_query": '"Palworld" gameplay'
-            },
             "Cyberpunk 2077": {
                 "reddit_subreddit": "cyberpunkgame",
                 "twitter_query": '"Cyberpunk 2077" OR #Cyberpunk2077',
@@ -155,9 +148,6 @@ class DataCollector:
             # Palworld mapping depends on which game ID 1962660 actually resolved to.
             # Assuming it resolved to "Call of Duty®: Modern Warfare® II" based on notebook output
             "Call of Duty: Modern Warfare II": { # Renamed key from "Call of Duty®: Modern Warfare® II"
-                # This mapping will be used if an AppID resolves to the name "Call of Duty: Modern Warfare II".
-                # Note: AppID 1962660 in the experimental list is Palworld.
-                # AppID 1938090 is Call of Duty HQ and has its own mapping.
                 "reddit_subreddit": "ModernWarfareII",
                 "twitter_query": '"Modern Warfare 2" OR #MWII OR #MW2',
                 "google_trends_keyword": "Modern Warfare 2",
@@ -168,9 +158,6 @@ class DataCollector:
                 "reddit_subreddit": "NarakaBladePoint",
                 "twitter_query": '"NARAKA BLADEPOINT" OR #NARAKABLADEPOINT',
             },
-            # --- Old mappings for reference --- (Can be removed)
-            # "New World": { "reddit_subreddit": "newworldgame" },
-            # "Hogwarts Legacy": { "reddit_subreddit": "hogwartslegacy" },
         }
 
         # Create storage for collected data
@@ -196,33 +183,24 @@ class DataCollector:
                 1172470, # Apex Legends
                 1599340, # Lost Ark
                 1091500, # Cyberpunk 2077
-                # 1675200, # Baldur's Gate 3 (Incorrect ID resolved to Steam Deck) -> Replaced below
                 1086940, # Baldur's Gate 3 (Correct ID)
                 1245620, # ELDEN RING
-                271590,  # Grand Theft Auto V (Replacing New World)
-                892970,  # Valheim (Replacing incorrect BG3 ID slot)
+                271590,  # Grand Theft Auto V
+                892970,  # Valheim
             ],
             "declining": [
-                # 1240440, # Babylon's Fall (API issues) -> Replaced below
-                359550,  # Tom Clancy's Rainbow Six Siege (Replacing Babylon's Fall)
-                # 1262900, # New World (API issues) -> Replaced above
-                # 594650,  # Hunt: Showdown (Removed as requested)
-                # 235960,  # Natural Selection 2 (API issues) -> Replaced below
-                440,     # Team Fortress 2 (Replacing Natural Selection 2)
-                233860,  # Kenshi (Seems OK)
-                292030,  # The Witcher 3: Wild Hunt (Seems OK)
-                252950   # Rocket League (Seems OK, though transitioned to Epic)
+                359550,  # Tom Clancy's Rainbow Six Siege
+                440,     # Team Fortress 2
+                233860,  # Kenshi
+                292030,  # The Witcher 3: Wild Hunt
+                252950   # Rocket League
             ],
             "experimental": [
-                1938090, # Call of Duty HQ (MW3 | Warzone) - Its mapping uses r/ModernWarfareIII or r/CODWarzone
-                1551360, # Forza Horizon 5 (Seems OK)
-                1172620, # Sea of Thieves (Correct AppID, mapping key "Sea of Thieves" uses r/Seaofthieves)
-                1962660, # Palworld (Correct AppID, new mapping for "Palworld" uses r/Palworld)
-                # Note: The mapping for "Call of Duty: Modern Warfare II" (using r/ModernWarfareII)
-                # would require a different AppID that specifically resolves to that name,
-                # or for AppID 1938090 to be sometimes identified as such and logic to pick the MWII mapping.
-                1203220 # NARAKA: BLADEPOINT (Replacing Hogwarts Legacy slot)
-
+                1938090, # Call of Duty HQ (MW3 | Warzone)
+                1551360, # Forza Horizon 5
+                1172620, # Sea of Thieves
+                1962660, # Palworld
+                1203220  # NARAKA: BLADEPOINT
             ]
         }
         

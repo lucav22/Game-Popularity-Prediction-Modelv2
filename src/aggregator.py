@@ -193,24 +193,3 @@ class DataAggregator:
              return pd.DataFrame()
 
         return pd.DataFrame(aggregated_results)
-
-# Example Usage (can be run from a notebook or main script)
-# if __name__ == "__main__":
-#     # Assuming your script is run from the project root or you adjust the path
-#     aggregator = DataAggregator(data_dir="data")
-#     merged_df = aggregator.load_merged_data()
-#
-#     if not merged_df.empty:
-#         final_features_df = aggregator.aggregate_features(merged_df)
-#
-#         print("\n--- Aggregated Features DataFrame ---")
-#         print(final_features_df.head())
-#         print(f"\nShape: {final_features_df.shape}")
-#
-#         # Optionally save the aggregated features
-#         save_path = Path("data") / "aggregated_game_features.csv"
-#         try:
-#             final_features_df.to_csv(save_path, index=False)
-#             print(f"\nAggregated features saved to: {save_path}")
-#         except Exception as e:
-#             print(f"\nError saving aggregated features: {e}")

@@ -88,32 +88,16 @@ class ExternalDataCollector:
         found_dotenv = load_dotenv()
         print(f"[ExternalDataCollector] .env file found and loaded: {found_dotenv}")
 
-        # Debug: Print loaded Reddit environment variables
-        reddit_client_id_env = os.environ.get('REDDIT_CLIENT_ID')
-        reddit_client_secret_env = os.environ.get('REDDIT_CLIENT_SECRET')
-        reddit_user_agent_env = os.environ.get('REDDIT_USER_AGENT')
-
-        twitter_bearer_token_env = os.environ.get('TWITTER_BEARER_TOKEN')
-        try:
-            twitter_request_timeout_env = float(os.environ.get('TWITTER_REQUEST_TIMEOUT', '20.0'))
-            if twitter_request_timeout_env <= 0:
-                print(f"Warning: Invalid TWITTER_REQUEST_TIMEOUT value ({twitter_request_timeout_env}). Defaulting to 20.0 seconds.")
-                twitter_request_timeout_env = 20.0
-        except (ValueError, TypeError):
-            print(f"Warning: Could not parse TWITTER_REQUEST_TIMEOUT. Defaulting to 20.0 seconds.")
-            twitter_request_timeout_env = 20.0
-
-
         # Example: Load necessary API keys from environment variables
         config = {
             'reddit': {
-                'client_id': reddit_client_id_env,
-                'client_secret': reddit_client_secret_env,
-                'user_agent': reddit_user_agent_env or 'game_popularity_bot/0.1' # Fallback if None
+                'client_id': os.environ.get('REDDIT_CLIENT_ID'),
+                'client_secret': os.environ.get('REDDIT_CLIENT_SECRET'),
+                'user_agent': os.environ.get('REDDIT_USER_AGENT') or 'game_popularity_bot/0.1' # Fallback if None
             },
             'twitter': {
-                'bearer_token': twitter_bearer_token_env,
-                'request_timeout': twitter_request_timeout_env # Added Twitter request timeout
+                'bearer_token': os.environ.get('TWITTER_BEARER_TOKEN'),
+                'request_timeout': float(os.environ.get('TWITTER_REQUEST_TIMEOUT', '20.0'))
             },
             # Add other platforms (YouTube, Twitch, Steam) if needed here
             'twitch': { # Added Twitch example
@@ -135,40 +119,26 @@ class ExternalDataCollector:
             print("Error: pytrends library not installed. Google Trends functionality will be unavailable.")
             return None
         
-        # Attempt to log version, but don't fail if __version__ is missing
         try:
-            import pytrends # Make sure pytrends is importable at the top level
-            # Check for __version__ attribute safely
-            version = getattr(pytrends, '__version__', 'unknown (attribute missing)')
-            print(f"[ExternalDataCollector._init_pytrends] Detected pytrends library version: {version}")
-        except ImportError:
-            print("[ExternalDataCollector._init_pytrends] Could not import top-level \'pytrends\' package. Is it installed correctly?")
-            # We might still proceed if TrendReq was imported successfully earlier
-        except Exception as e: 
-            print(f"[ExternalDataCollector._init_pytrends] Error determining pytrends library version: {e}")
-
-        # Attempt initialization with 'requests_session' first
-        try:
+            # Attempt initialization with 'requests_session' first
             client = TrendReq(
                 hl='en-US', 
                 tz=360, 
                 timeout=(15, 30),
-                requests_session=self.pytrends_session # self.pytrends_session has verify=False set in __init__
+                requests_session=self.pytrends_session
             )
-            print("Pytrends client initialized successfully with a shared session (using \'requests_session\').")
+            print("Pytrends client initialized successfully with a shared session.")
             return client
         except TypeError as e:
             if "unexpected keyword argument 'requests_session'" in str(e) or \
                "__init__() got an unexpected keyword argument 'requests_session'" in str(e):
                 print("Warning: Installed pytrends version does not support \'requests_session\'. Falling back to basic initialization with requests_args.")
-                print("         Consider checking your pytrends installation (target version 4.7.0+ for full support).")
-                # Fallback: Initialize without requests_session, but with requests_args for SSL verification
                 try:
                     client = TrendReq(
                         hl='en-US', 
                         tz=360, 
                         timeout=(15, 30),
-                        requests_args={'verify': False} # Ensure this is applied in fallback
+                        requests_args={'verify': False}
                     )
                     print("Pytrends client initialized successfully (fallback, with requests_args for SSL verification).")
                     return client
