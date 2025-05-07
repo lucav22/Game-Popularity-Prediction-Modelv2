@@ -387,7 +387,7 @@ class ExternalDataCollector:
         print(f"[{datetime.datetime.now()}] Finished collecting external signals.")
         return external_data
 
-    def get_google_trends_interest(self, keyword: str, timeframe: str = 'today 3-m', geo: str = '', retries: int = 2, delay: int = 15) -> Optional[pd.DataFrame]:
+    def get_google_trends_interest(self, keyword: str, timeframe: str = 'today 3-m', geo: str = '', retries: int = 3, delay: int = 30) -> Optional[pd.DataFrame]:
         """
         Fetches Google Trends interest over time for a specific keyword.
         Uses a pre-initialized pytrends client with a shared session.
@@ -397,8 +397,8 @@ class ExternalDataCollector:
             timeframe (str): Time range for the data. Examples: 'today 5-y', 'today 3-m', '2024-01-01 2024-04-30'.
                              Defaults to 'today 3-m' (last 3 months).
             geo (str): Geolocation filter (e.g., 'US'). Defaults to worldwide.
-            retries (int): Number of retry attempts on rate limit errors (429).
-            delay (int): Initial delay in seconds between retries. Increased default to 15.
+            retries (int): Number of retry attempts on rate limit errors (429). Increased to 3.
+            delay (int): Initial delay in seconds between retries. Increased default to 30.
 
         Returns:
             Optional[pd.DataFrame]: A pandas DataFrame with the interest scores over time,
@@ -416,10 +416,12 @@ class ExternalDataCollector:
             try:
                 # Use the shared pytrends_client
                 self.pytrends_client.build_payload([keyword], cat=0, timeframe=timeframe, geo=geo, gprop='')
-                interest_df = self.pytrends_client.interest_over_time()
+                # Increase delay slightly after each request to be polite, even successful ones
+                # This sleep is after building the payload, before fetching interest_over_time
+                # to give the API a breather between constructing different queries.
+                time.sleep(10) # Increased base sleep to 10 seconds after payload build
 
-                # Increase delay slightly after each request to be polite
-                time.sleep(5) # Increased base sleep slightly
+                interest_df = self.pytrends_client.interest_over_time()
 
                 if interest_df.empty:
                     print(f"Info: No Google Trends data found for keyword '{keyword}' in timeframe '{timeframe}'.")
@@ -439,7 +441,7 @@ class ExternalDataCollector:
                     attempt += 1
                     print(f"Warning: Google Trends rate limit hit for '{keyword}'. Retrying ({attempt}/{retries}) after {current_delay}s...")
                     time.sleep(current_delay)
-                    current_delay *= 2 # Exponential backoff
+                    current_delay *= 2.5 # Slightly more aggressive exponential backoff
                 else:
                     # Log non-retryable errors or final failure
                     if is_rate_limit:
@@ -498,23 +500,45 @@ class ExternalDataCollector:
             elif time_filter == 'year': start_time = now - 31536000
             else: start_time = 0 # 'all'
             
-            # Use Pushshift query format if available/needed, or stick to PRAW search
-            # PRAW search might be less reliable for exact counts over specific time ranges
-            query = f"timestamp:{start_time}..{now}"
             post_count = 0
+            fetch_limit = 250 # Max recent posts to iterate through to find those within the time_filter
+
+            if not subreddit: # Should be caught by earlier checks, but as a safeguard
+                print(f"Error: Subreddit object for r/{subreddit_name} is None before attempting to fetch posts.")
+                # Ensure the dynamic key is present in the error result for consistency
+                error_result_with_specific_key = {**error_result, f"recent_post_count_{time_filter}": None}
+                return error_result_with_specific_key
+
             try:
-                # Limit search results heavily to avoid excessive API usage/time
-                # Note: PRAW search limit is often 1000 max, might not be accurate for high-volume subs
-                for _ in subreddit.search(query, syntax='cloudsearch', limit=1000): 
-                    post_count += 1
-                if post_count == 1000:
-                    print(f"Warning: Reached PRAW search limit (1000) for r/{subreddit_name} in time_filter '{time_filter}'. Count may be higher.")
-            except prawcore.exceptions.ServerError as search_error: # More specific exception for search issues
-                 print(f"Reddit Server Error during search for r/{subreddit_name}: {search_error}")
+                # Iterate through the most recent submissions and count those within the time window
+                # .new() returns newest first.
+                for submission in subreddit.new(limit=fetch_limit):
+                    if submission.created_utc >= start_time:
+                        # The submission is within our defined window [start_time, now]
+                        # (current time is implicitly the upper bound for .new())
+                        post_count += 1
+                    elif start_time > 0 : 
+                        # If we encounter a post older than start_time, and we are not looking for 'all' (start_time == 0),
+                        # then subsequent posts will also be older, so we can stop.
+                        # This optimization is valid because .new() sorts by newest first.
+                        break
+                
+                if post_count == fetch_limit and start_time > 0: # Check start_time > 0 to avoid warning for 'all' when limit is hit
+                    # If we counted up to fetch_limit and it wasn't for 'all' time (where hitting limit is expected behavior for this method)
+                    # and we didn't break early (meaning all fetched posts were within the window),
+                    # it means there might have been more posts in the actual time_filter window.
+                    print(f"Warning: Recent post count for r/{subreddit_name} (filter: {time_filter}) reached fetch limit ({fetch_limit}). Actual count may be higher if older posts were not checked beyond this limit.")
+                elif time_filter == 'all' and post_count > 0 : # Clarify meaning for 'all'
+                     print(f"Info: For r/{subreddit_name} with time_filter='all', counted {post_count} posts from the most recent {fetch_limit} submissions (as 'all' implies no specific start time for this counting method).")
+
+            except prawcore.exceptions.ServerError as e_server:
+                 print(f"Reddit Server Error during .new() iteration for r/{subreddit_name}: {e_server}")
                  post_count = None # Indicate search failure
-            except Exception as search_error:
-                 # Catch other errors during the search itself
-                 print(f"Error during Reddit search query execution for r/{subreddit_name}: {search_error}")
+            except prawcore.exceptions.PrawcoreException as e_prawcore: # Broader PRAW core exceptions
+                 print(f"PRAW Core Error during .new() iteration for r/{subreddit_name}: {e_prawcore}")
+                 post_count = None
+            except Exception as e_generic: # Catch any other unexpected errors
+                 print(f"Error during Reddit .new() iteration for r/{subreddit_name}: {e_generic}")
                  post_count = None # Indicate search failure
 
             # Increase delay slightly

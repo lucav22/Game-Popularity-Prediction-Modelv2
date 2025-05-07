@@ -75,6 +75,13 @@ class DataCollector:
                 "reddit_subreddit": "lostarkgame",
                 "twitter_query": '"Lost Ark" OR #LostArkGame',
             },
+            "Palworld": { # Added mapping for Palworld
+                "reddit_subreddit": "Palworld",
+                "twitter_query": '"Palworld" OR #Palworld',
+                "google_trends_keyword": "Palworld",
+                "twitch_name": "Palworld",
+                "youtube_query": '"Palworld" gameplay'
+            },
             "Cyberpunk 2077": {
                 "reddit_subreddit": "cyberpunkgame",
                 "twitter_query": '"Cyberpunk 2077" OR #Cyberpunk2077',
@@ -148,6 +155,9 @@ class DataCollector:
             # Palworld mapping depends on which game ID 1962660 actually resolved to.
             # Assuming it resolved to "Call of Duty®: Modern Warfare® II" based on notebook output
             "Call of Duty: Modern Warfare II": { # Renamed key from "Call of Duty®: Modern Warfare® II"
+                # This mapping will be used if an AppID resolves to the name "Call of Duty: Modern Warfare II".
+                # Note: AppID 1962660 in the experimental list is Palworld.
+                # AppID 1938090 is Call of Duty HQ and has its own mapping.
                 "reddit_subreddit": "ModernWarfareII",
                 "twitter_query": '"Modern Warfare 2" OR #MWII OR #MW2',
                 "google_trends_keyword": "Modern Warfare 2",
@@ -204,16 +214,13 @@ class DataCollector:
                 252950   # Rocket League (Seems OK, though transitioned to Epic)
             ],
             "experimental": [
-                1938090, # Call of Duty HQ (MW3 | Warzone) (Seems OK)
+                1938090, # Call of Duty HQ (MW3 | Warzone) - Its mapping uses r/ModernWarfareIII or r/CODWarzone
                 1551360, # Forza Horizon 5 (Seems OK)
-                # 1426210, # Constant Caliber (API issues) -> Replaced below
-                1172620, # Sea of Thieves (Replacing Constant Caliber)
-                # 1240520, # Redfall (API issues) -> Replaced below
-                1962660, # Palworld (Replacing Redfall)
-                # 1675920, # PAYDAY 3 (API issues) -> Replaced below
-                # 1332820  # Hogwarts Legacy (API issues) -> Using Palworld again for now
-                # Add another recent/experimental game if Palworld duplication is not desired
-                # Example: 1203220 (NARAKA: BLADEPOINT)
+                1172620, # Sea of Thieves (Correct AppID, mapping key "Sea of Thieves" uses r/Seaofthieves)
+                1962660, # Palworld (Correct AppID, new mapping for "Palworld" uses r/Palworld)
+                # Note: The mapping for "Call of Duty: Modern Warfare II" (using r/ModernWarfareII)
+                # would require a different AppID that specifically resolves to that name,
+                # or for AppID 1938090 to be sometimes identified as such and logic to pick the MWII mapping.
                 1203220 # NARAKA: BLADEPOINT (Replacing Hogwarts Legacy slot)
 
             ]
