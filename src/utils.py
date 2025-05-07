@@ -1,21 +1,3 @@
-"""
-Utilities Module
-
-Purpose:
-    Provides common utility functions for data processing, visualization,
-    and analysis in the Game Popularity Prediction System v2.
-
-Key Features:
-    - Data preprocessing helpers
-    - Visualization templates
-    - Common analysis functions
-    - Configuration management
-
-Author: Gianluca Villegas
-Date: 2025-05-04
-Version: 2.0
-"""
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt

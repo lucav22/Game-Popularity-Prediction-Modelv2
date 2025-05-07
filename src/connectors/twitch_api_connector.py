@@ -1,22 +1,3 @@
-"""
-Twitch API Connector Module
-
-Purpose:
-    Provides an interface for connecting to the official Twitch API (Helix)
-    to retrieve data relevant for game popularity, such as viewership numbers.
-
-Key Features Needed:
-    - OAuth authentication (App Access Token)
-    - Rate limiting specific to Twitch API
-    - Error handling and retries
-    - Methods for retrieving stream counts and viewer counts per game
-    - Caching mechanisms (optional but recommended)
-
-Author: Gianluca Villegas
-Date: 2025-05-04
-Version: 0.1 (Initial Skeleton)
-"""
-
 import requests
 import time
 import os
@@ -168,11 +149,19 @@ class TwitchAPIConnector:
             if len(response['data']) > 0:
                  # Assuming the first result is the most relevant one
                 game_data = response['data'][0]
-                # Verify the name matches closely (optional, Twitch often returns exact match first)
-                if game_data.get('name', '').lower() == game_name.lower():
-                    game_id = game_data.get('id')
-                else:
-                     print(f"Warning: Twitch returned '{game_data.get('name')}' for '{game_name}', ID not cached.")
+                # --- Removed strict name check ---
+                # # Verify the name matches closely (optional, Twitch often returns exact match first)
+                # if game_data.get('name', '').lower() == game_name.lower():
+                #     game_id = game_data.get('id')
+                # else:
+                #      print(f"Warning: Twitch returned '{game_data.get('name')}' for '{game_name}', ID not cached.")
+                # --- End Removal ---
+                # Trust the first result from the Twitch API
+                game_id = game_data.get('id')
+                # Optional: Log if the name is different, but still use the ID
+                if game_data.get('name', '').lower() != game_name.lower():
+                    print(f"Info: Twitch returned game '{game_data.get('name')}' (ID: {game_id}) for query '{game_name}'. Using this ID.")
+
             else:
                 # Game name likely not found on Twitch
                 print(f"Info: Game '{game_name}' not found on Twitch.")

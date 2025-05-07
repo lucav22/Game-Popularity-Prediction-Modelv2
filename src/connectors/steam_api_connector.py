@@ -1,22 +1,3 @@
-"""
-Steam API Connector Module
-
-Purpose:
-    Provides a robust interface for connecting to the Steam API with rate limiting,
-    error handling, and caching mechanisms. This is a core component for real-time
-    game data collection in the Game Popularity Prediction System v2.
-
-Key Features:
-    - Rate-limited API requests to prevent throttling
-    - Error handling and retry logic
-    - Caching mechanism to reduce redundant API calls
-    - Methods for retrieving game details and player counts
-
-Author: Gianluca Villegas
-Date: 2025-04-27
-Version: 2.0
-"""
-
 import requests
 import time
 import os
